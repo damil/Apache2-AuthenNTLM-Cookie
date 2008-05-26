@@ -11,6 +11,7 @@ my $builder = Module::Build->new(
       'Apache2::RequestRec' => 0,
       'Apache2::Cookie'     => 0,
       'Apache2::AuthenNTLM' => 0,
+      'Apache2::Directive'  => 0,
       'Digest::SHA1'        => 0,
      },
     build_requires => {

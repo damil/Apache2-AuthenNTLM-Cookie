@@ -5,14 +5,16 @@ use warnings;
 
 use Apache2::RequestRec ();
 use Apache2::Cookie;
+use Apache2::Directive ();
 use Apache2::Const -compile => qw(OK) ;
-use Digest::SHA1  qw(sha1_base64);
+
+use Digest::SHA1  qw(sha1_hex);
 
 use base 'Apache2::AuthenNTLM';
 
 our $VERSION = '0.01';
 
-my $PACK_STRING = "A27 A13 A*"; # digest(27); time_created(13); username
+my $PACK_STRING = "A40 A12 A*"; # digest(40); time_created(12); username
 
 sub handler : method  {
   my ($class, $r) = @_ ;
@@ -30,34 +32,34 @@ sub handler : method  {
 
   # OK if cookie present and valid
   return Apache2::Const::OK 
-    if $cookie and $self->validate_cookie($cookie);
+    if $cookie and $self->validate_cookie($cookie->value);
 
   # otherwise, go through the NTLM handshake and then create the cookie
   $r->log->debug("AuthenNTLM::Cookie: calling SUPER (NTLM handler)");
   my $result = $class->SUPER::handler($r); # if success, will set $r->user
-  $class->set_cookie if $result == Apache2::Const::OK;
+  $self->set_cookie if $result == Apache2::Const::OK;
 
   return $result;
 }
 
 
 sub validate_cookie : method {
-  my ($self, $cookie) = @_;
+  my ($self, $cookie_val) = @_;
 
   # unpack cookie information
-  my ($sha, $time_created, $username) = unpack $PACK_STRING, $cookie;
+  my ($sha, $time_created, $username) = unpack $PACK_STRING, $cookie_val;
 
   # valid if not too old and matches the SHA1 digest
   my $now = time;
   my $is_valid 
     =  ($now - $time_created) < $self->{refresh}
-    && $sha eq sha1_base64($time_created, $username, $self->{secret});
+    && $sha eq sha1_hex($time_created, $username, $self->{secret});
 
   # if valid, set the username
   $self->{request}->user($username) if $is_valid;
 
-  $self->{request}->log->debug("AuthenNTLM::Cookie validation : " . 
-                                 $is_valid ? "valid" : "invalid");
+  $self->{request}->log->debug("cookie $cookie_val is " . 
+                                 ($is_valid ? "valid" : "invalid"));
   return $is_valid;
 }
 
@@ -69,7 +71,7 @@ sub set_cookie : method {
   my $r           = $self->{request};
   my $username    = $r->user; # was just set from the parent handler
   my $now         = time;
-  my $sha         = sha1_base64($now, $username, $self->{secret});
+  my $sha         = sha1_hex($now, $username, $self->{secret});
   my $cookie_val  = pack $PACK_STRING, $sha, $now, $username;
   my @cookie_args = (-name => $self->{cookie_name}, -value => $cookie_val);
 
@@ -91,10 +93,10 @@ sub set_cookie : method {
 sub default_secret {
   my ($class) = @_;
 
-  # default secret : mtime and ctime of Apache configuration file
+  # default secret : mtime and i-node of Apache configuration file
   my $config_file     = Apache2::Directive::conftree->filename;
-  my ($mtime, $ctime) = (stat $config_file)[9, 10];  
-  return $mtime . $ctime;
+  my ($mtime, $inode) = (stat $config_file)[9, 1];  
+  return $mtime . $inode;
 }
 
 
@@ -166,7 +168,7 @@ allow you to control various details of cookie generation :
    PerlSetVar expires     my_cookie_expires # default is none
    PerlSetVar path        my_cookie_path    # default is none
    PerlSetVar refresh     some_seconds      # default is 3600 (1 hour)
-   PerlSetVar secret      my_secret_string  # default is mtime of config file
+   PerlSetVar secret      my_secret_string  # default from stat(config file)
 
 See L<Apache2::Cookie> for explanation of variables
 C<cookie_name>, C<domain>, C<expires>, and C<path>.
@@ -193,10 +195,12 @@ This is a secret phrase for generating a SHA1 digest that will be
 incorporated into the cookie. The digest also incorporates the
 username and cookie creation time, and is checked at each request :
 therefore it is impossible to forge a fake cookie without knowing the
-secret. The default value for the secret is the concatenation of
-modification time and inode change time of the F<httpd.conf> file on
-the server; therefore if the configuration file changes, authentication
-cookies are automatically invalidated.
+secret. 
+
+The default value for the secret is the concatenation of modification
+time and inode of the F<httpd.conf> file on the server; therefore if
+the configuration file changes, authentication cookies are
+automatically invalidated.
 
 =back
 
