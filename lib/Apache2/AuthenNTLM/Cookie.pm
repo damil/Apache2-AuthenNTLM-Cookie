@@ -246,6 +246,15 @@ L<http://search.cpan.org/dist/Apache2-AuthenNTLM-Cookie>
 
 =back
 
+
+=head1 TESTING NOTE
+
+This module has no tests ... because I didn't manage to write 
+command-line tests that would successfully load the APR dynamic
+libraries. Any hints welcome! Nevertheless, the module
+has been successfully tested on Apache2.2/modperl2/solaris.
+
+
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2008 Laurent Dami, all rights reserved.
