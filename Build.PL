@@ -19,7 +19,7 @@ my $builder = Module::Build->new(
     build_requires => {
         'Test::More' => 0,
     },
-    add_to_cleanup      => [ 'Apache2-AuthenNTLM-Cookie-*' ],
+    add_to_cleanup      => [ qw(MANIFEST META.yml Apache2-AuthenNTLM-Cookie-*) ],
 );
 
 $builder->create_build_script();
